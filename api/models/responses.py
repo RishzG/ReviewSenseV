@@ -1,0 +1,50 @@
+"""Pydantic response models."""
+
+from pydantic import BaseModel
+from typing import Any
+
+
+class QueryResponse(BaseModel):
+    question: str
+    intent: str  # "structured", "semantic", "synthesis"
+    answer: str
+    sql: str | None = None
+    data: list[dict[str, Any]] | None = None
+    sources: list[dict[str, Any]] | None = None
+    latency_ms: float
+
+
+class CategorySummary(BaseModel):
+    derived_category: str
+    review_count: int
+    avg_rating: float
+    avg_sentiment: float
+    negative_rate: float
+
+
+class CategoryDetail(BaseModel):
+    derived_category: str
+    review_count: int
+    avg_rating: float
+    avg_sentiment: float
+    negative_rate: float
+    top_themes: list[dict[str, Any]]
+    top_complaints: list[dict[str, Any]]
+    monthly_trends: list[dict[str, Any]]
+
+
+class ProductSummary(BaseModel):
+    asin: str
+    derived_category: str | None
+    review_count: int
+    avg_rating: float
+    avg_sentiment: float
+    negative_rate: float
+    top_theme: str | None
+
+
+class HealthResponse(BaseModel):
+    status: str
+    snowflake_connected: bool
+    analyst_available: bool
+    search_available: bool

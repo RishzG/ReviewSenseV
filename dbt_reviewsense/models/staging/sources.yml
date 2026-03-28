@@ -1,0 +1,34 @@
+version: 2
+
+sources:
+  - name: analytics
+    database: REVIEWSENSE_DB
+    schema: ANALYTICS
+    tables:
+      - name: REVIEWS_FOR_GENAI
+        description: >
+          Primary source. 183,457 deduplicated, typed reviews with TEXT_LEN.
+          Created by teammate (Jiwei). Do NOT modify.
+        columns:
+          - name: REVIEW_ID
+            description: Unique review identifier
+          - name: ASIN
+            description: Amazon product identifier
+          - name: USER_ID
+            description: Reviewer user ID
+          - name: RATING
+            description: Star rating (1-5)
+          - name: TITLE
+            description: Review title
+          - name: REVIEW_TEXT
+            description: Review body text
+          - name: VERIFIED_PURCHASE
+            description: Whether the review is from a verified purchase
+          - name: HELPFUL_VOTE
+            description: Number of helpful votes
+          - name: REVIEW_TS
+            description: Review timestamp (contains some bad future dates)
+          - name: CATEGORY
+            description: Original category field (mostly NULL)
+          - name: TEXT_LEN
+            description: Character length of review text

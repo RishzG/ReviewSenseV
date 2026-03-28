@@ -1,0 +1,18 @@
+-- Category-level complaint analysis
+-- Focuses on negative reviews (rating 1-2) grouped by category and theme
+
+{{ config(materialized='table') }}
+
+SELECT
+    DERIVED_CATEGORY,
+    REVIEW_THEME,
+    COUNT(*) AS COMPLAINT_COUNT,
+    ROUND(AVG(SENTIMENT_SCORE), 4) AS AVG_SENTIMENT,
+    ROUND(AVG(HELPFUL_VOTE), 2) AS AVG_HELPFUL_VOTES,
+    COUNT(CASE WHEN REVIEW_QUALITY = 'high' THEN 1 END) AS HIGH_QUALITY_COMPLAINTS,
+    ROUND(COUNT(CASE WHEN REVIEW_QUALITY = 'high' THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 4) AS HIGH_QUALITY_RATE
+FROM {{ ref('enriched_reviews') }}
+WHERE RATING <= 2
+  AND DERIVED_CATEGORY IS NOT NULL
+GROUP BY DERIVED_CATEGORY, REVIEW_THEME
+HAVING COUNT(*) >= 5

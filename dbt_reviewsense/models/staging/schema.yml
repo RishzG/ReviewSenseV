@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: stg_reviews
+    description: >
+      Staging view over REVIEWS_FOR_GENAI. Renames columns, concats title+text,
+      applies regex cleaning, filters bad timestamps (YEAR > 2026), and assigns
+      review quality tier.
+    columns:
+      - name: REVIEW_ID
+        description: Unique review identifier
+        tests:
+          - unique
+          - not_null
+      - name: ASIN
+        description: Amazon product identifier
+        tests:
+          - not_null
+      - name: RATING
+        description: Star rating 1-5
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+      - name: REVIEW_TEXT_CLEAN
+        description: Cleaned review text (HTML/URL stripped, whitespace collapsed)
+        tests:
+          - not_null
+      - name: REVIEW_QUALITY
+        description: "Quality tier based on text length: high (500+), medium (150-499), low (<150)"
+        tests:
+          - accepted_values:
+              values: ['high', 'medium', 'low']

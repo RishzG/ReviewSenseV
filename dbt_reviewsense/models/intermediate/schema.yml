@@ -1,0 +1,62 @@
+version: 2
+
+models:
+  - name: int_enriched_reviews
+    description: >
+      Reviews enriched with Cortex AI: sentiment score, theme classification,
+      and conditional summarization. Materialized as table to avoid recomputing
+      expensive LLM functions.
+    columns:
+      - name: REVIEW_ID
+        tests:
+          - unique
+          - not_null
+      - name: SENTIMENT_SCORE
+        description: "Cortex SENTIMENT output: -1.0 (negative) to 1.0 (positive)"
+        tests:
+          - not_null
+      - name: REVIEW_THEME
+        description: Primary theme from CLASSIFY_TEXT
+        tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values:
+                  - battery_life
+                  - build_quality
+                  - sound_quality
+                  - connectivity
+                  - comfort
+                  - value_for_money
+                  - customer_service
+                  - durability
+                  - ease_of_use
+                  - other
+      - name: REVIEW_SUMMARY
+        description: "Cortex SUMMARIZE for reviews >500 chars, original text otherwise"
+        tests:
+          - not_null
+
+  - name: int_enriched_reviews_sample
+    description: >
+      Sample of 100 enriched reviews for validation before full run.
+      Disabled by default — enable manually for testing.
+
+  - name: int_product_categories
+    description: >
+      Product category derivation via Cortex COMPLETE. One row per ASIN
+      (only ASINs with 3+ reviews). Uses 14-category taxonomy.
+    columns:
+      - name: ASIN
+        tests:
+          - unique
+          - not_null
+      - name: DERIVED_CATEGORY
+        description: Category derived from review text via LLM
+        tests:
+          - not_null
+      - name: DERIVATION_CONFIDENCE
+        description: "Confidence tier: high (50+ reviews), medium (10-49), low (3-9)"
+        tests:
+          - accepted_values:
+              values: ['high', 'medium', 'low']
