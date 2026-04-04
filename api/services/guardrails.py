@@ -42,6 +42,17 @@ ON_TOPIC_KEYWORDS = [
     'negative', 'positive', 'worst', 'best', 'recommend', 'buy', 'worth',
     'durability', 'comfort', 'connectivity', 'value', 'ease of use',
     'sound', 'build', 'service', 'vote', 'helpful', 'verified', 'purchase',
+    # Product names and brands commonly in our dataset
+    'amazon', 'echo', 'fire', 'kindle', 'alexa', 'ring', 'roku', 'anker',
+    'logitech', 'sony', 'bose', 'samsung', 'apple', 'google', 'nest',
+    'fitbit', 'garmin', 'jabra', 'jbl', 'senso', 'mpow', 'aukey',
+    # Common product types
+    'earphone', 'earbud', 'headset', 'microphone', 'mouse', 'keyboard',
+    'monitor', 'tablet', 'stick', 'plug', 'bulb', 'thermostat', 'doorbell',
+    'router', 'extender', 'hub', 'adapter', 'dongle', 'remote', 'controller',
+    'tracker', 'watch', 'band', 'scale', 'cam', 'webcam', 'dash',
+    # General question words that imply product interest
+    'people say', 'people think', 'what about', 'how is', 'how are', 'tell me',
     'trend', 'monthly', 'compare', 'analysis', 'average', 'count', 'total',
 ]
 

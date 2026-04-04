@@ -41,7 +41,9 @@ def get_alerts(
                    ACKNOWLEDGED, CREATED_AT
             FROM GOLD.ALERT_LOG
             {where}
-            ORDER BY CREATED_AT DESC
+            ORDER BY CASE SEVERITY WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 END,
+                     ABS(COALESCE(DEVIATION_SCORE, 0)) DESC,
+                     CREATED_AT DESC
             LIMIT {limit}
         """, params)
 

@@ -51,7 +51,16 @@ def query_search(question: str, limit: int = 5) -> dict:
 
         # Generate answer using Cortex COMPLETE with retrieved context
         rag_prompt = f"""Be precise and factual. Do not add creative elaboration.
-Answer the user's question using ONLY the reviews below. Reference specific ratings and details from the reviews.
+Answer the user's question using ONLY the reviews below.
+
+Format your response using markdown:
+- Start with a brief 1-2 sentence summary
+- Use **bold** for key points
+- Use bullet points for distinct findings
+- Group by theme if multiple aspects are discussed
+- Include specific ratings when referencing a review (e.g., "One reviewer (4/5) noted...")
+- Keep each bullet point to 1-2 sentences max
+
 Do not invent information not present in the reviews. If the reviews don't answer the question, say so.
 
 Reviews:

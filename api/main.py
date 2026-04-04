@@ -8,7 +8,7 @@ Three retrieval paths, one orchestrator:
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from api.routers import query, categories, products, compare, health, alerts
+from api.routers import query, categories, products, compare, health, alerts, reports
 
 app = FastAPI(
     title="ReviewSense AI",
@@ -33,3 +33,4 @@ app.include_router(categories.router)
 app.include_router(products.router)
 app.include_router(compare.router)
 app.include_router(alerts.router)
+app.include_router(reports.router)

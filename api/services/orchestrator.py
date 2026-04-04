@@ -49,10 +49,25 @@ def _legacy_route(question: str) -> dict:
     elif any(s in q for s in structured_signals):
         result = query_analyst(question)
         result["intent"] = "structured"
+
+        # If Analyst refused (can't answer), fall back to semantic search
+        answer_lower = (result.get("answer") or "").lower()
+        refusal_signals = ["not possible", "i'm sorry", "cannot", "don't have", "does not have",
+                           "not available", "unable to", "outside the scope"]
+        if any(s in answer_lower for s in refusal_signals) and not result.get("data"):
+            result = query_search(question)
+            result["intent"] = "semantic (fallback from analyst)"
     else:
-        # Default to analyst for ambiguous
+        # Default to analyst, with semantic fallback
         result = query_analyst(question)
         result["intent"] = "structured"
+
+        answer_lower = (result.get("answer") or "").lower()
+        refusal_signals = ["not possible", "i'm sorry", "cannot", "don't have", "does not have",
+                           "not available", "unable to", "outside the scope"]
+        if any(s in answer_lower for s in refusal_signals) and not result.get("data"):
+            result = query_search(question)
+            result["intent"] = "semantic (fallback from analyst)"
 
     result["question"] = question
     result["tools_used"] = [result["intent"]]
