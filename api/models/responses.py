@@ -6,11 +6,13 @@ from typing import Any
 
 class QueryResponse(BaseModel):
     question: str
-    intent: str  # "structured", "semantic", "synthesis"
+    intent: str  # "agent", "structured", "semantic", "synthesis"
     answer: str
     sql: str | None = None
     data: list[dict[str, Any]] | None = None
     sources: list[dict[str, Any]] | None = None
+    tools_used: list[str] | None = None
+    fallback: bool = False
     latency_ms: float
 
 

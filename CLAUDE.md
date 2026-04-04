@@ -10,26 +10,31 @@ This is a resume-grade project, not a class demo. Every architectural decision s
 
 ```
 Account:    pgb87192
+User:       FINCH
 Role:       TRAINING_ROLE
-Warehouse:  COMPUTE_WH
+Warehouse:  REVIEWSENSE_WH (dedicated, created for this project)
 Database:   REVIEWSENSE_DB
+Auth:       RSA key-pair (rsa_key.p8 / rsa_key.pub)
 ```
 
-Credentials are in `.env` (never commit this). Connection pattern:
+COMPUTE_WH is a shared warehouse — do NOT alter its size. Use REVIEWSENSE_WH for all project work.
+
+Credentials are in `.env` (never commit this). Connection uses **key-pair auth** (no password/MFA):
 
 ```python
+import snowflake.connector
 from dotenv import load_dotenv
 import os
 load_dotenv()
 
-connection_params = {
-    "account": os.getenv("SNOWFLAKE_ACCOUNT"),       # pgb87192
-    "user": os.getenv("SNOWFLAKE_USER"),
-    "password": os.getenv("SNOWFLAKE_PASSWORD"),
-    "role": os.getenv("SNOWFLAKE_ROLE"),              # TRAINING_ROLE
-    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),    # COMPUTE_WH
-    "database": os.getenv("SNOWFLAKE_DATABASE"),      # REVIEWSENSE_DB
-}
+conn = snowflake.connector.connect(
+    account=os.getenv("SNOWFLAKE_ACCOUNT"),       # pgb87192
+    user=os.getenv("SNOWFLAKE_USER"),             # FINCH
+    private_key_file=os.getenv("SNOWFLAKE_PRIVATE_KEY_PATH"),
+    role=os.getenv("SNOWFLAKE_ROLE"),             # TRAINING_ROLE
+    warehouse=os.getenv("SNOWFLAKE_WAREHOUSE"),   # REVIEWSENSE_WH
+    database=os.getenv("SNOWFLAKE_DATABASE"),     # REVIEWSENSE_DB
+)
 ```
 
 ## Architecture Overview
@@ -165,12 +170,22 @@ REVIEWSENSE_DB
 │       Columns: REVIEW_ID, ASIN, RATING, REVIEW_TS, REVIEW_TEXT,
 │                SENTIMENT_LABEL, REVIEW_SUMMARY
 │
-├── SILVER                                  ← NEW — dbt staging + intermediate
-│   └── (to be created by dbt)
+├── SILVER                                  ← dbt staging + intermediate (BUILT)
+│   ├── STG_REVIEWS                         (View — cleaned, filtered, quality-tiered)
+│   ├── INT_ENRICHED_REVIEWS                (Table — 183,447 rows, SENTIMENT + CLASSIFY_TEXT + SUMMARIZE)
+│   ├── INT_ENRICHED_REVIEWS_SAMPLE         (Table — 100-row validation sample)
+│   └── INT_PRODUCT_CATEGORIES              (Table — 12,028 ASINs categorized via COMPLETE)
 │
-└── GOLD                                    ← NEW — dbt marts + Cortex Analyst
-    ├── ANALYST_STAGE                       (Stage — for semantic model YAML)
-    └── (tables to be created by dbt)
+└── GOLD                                    ← dbt marts + Cortex Analyst (BUILT)
+    ├── PRODUCT_LOOKUP                      (Table — 12,028 ASINs → 14 categories)
+    ├── ENRICHED_REVIEWS                    (Table — 183,447 rows, main fact table)
+    ├── CATEGORY_SENTIMENT_SUMMARY          (Table — 14 rows, Tier 1)
+    ├── CATEGORY_MONTHLY_TRENDS             (Table — 1,715 rows, Tier 1 time-series)
+    ├── PRODUCT_SENTIMENT_SUMMARY           (Table — 407 rows, Tier 2, 20+ reviews only)
+    ├── THEME_CATEGORY_ANALYSIS             (Table — 138 rows, Tier 3)
+    ├── COMPLAINT_ANALYSIS                  (Table — 118 rows)
+    ├── REVIEWSENSE_ANALYTICS               (Semantic View — for Cortex Analyst)
+    └── SEMANTIC_STAGE                      (Stage — YAML backup)
 ```
 
 ## What's Already Built (Do NOT Rebuild)
@@ -190,36 +205,44 @@ REVIEWSENSE_DB
 
 ## Implementation Phases
 
-### Phase 1: Data Enrichment via dbt (Week 1-2)
-- Scale REVIEW_INSIGHTS from 200 → 183K rows
-- dbt source: ANALYTICS.REVIEWS_FOR_GENAI
-- Staging: column renaming, text concat, regex cleaning, filter bad timestamps
-- Intermediate: SENTIMENT(), CLASSIFY_TEXT(), conditional SUMMARIZE, review_quality tier
-- Product category derivation: Cortex COMPLETE on sample reviews per ASIN
-  - Level 1 (3+ reviews, ~10K ASINs): derive category from 14-item taxonomy
-  - Level 2 (20+ reviews, ~300 ASINs): derive product name + brand
-  - Validate on top 100 ASINs before full run
-- Gold marts: 3-tier aggregation (category / product / theme × category)
-- Output: GOLD.ENRICHED_REVIEWS, GOLD.PRODUCT_LOOKUP, aggregate marts
+### Phase 1: Data Enrichment via dbt ✅ COMPLETE
+- 183,447 reviews enriched with SENTIMENT, CLASSIFY_TEXT, conditional SUMMARIZE (~11.5 min on MEDIUM warehouse)
+- 12,028 ASINs categorized into 14 categories via COMPLETE(mistral-large) (~15 min)
+- 100-row sample validated first: sentiment correlates with rating, theme distribution diverse (only 2% "other")
+- 7 gold mart tables built (seconds, pure SQL aggregations)
+- LLM category output cleaned: stripped newlines, extracted category names from verbose responses via CASE/LIKE
 
-### Phase 2: Cortex Analyst + Search Upgrade (Week 2-3)
-- Semantic model YAML over GOLD category + theme marts (NOT product mart)
-- Upload to GOLD.ANALYST_STAGE
-- Rebuild Cortex Search Service with enriched filters (review_theme, sentiment_score, derived_category, review_quality)
+### Phase 2: Cortex Analyst + Search Upgrade ✅ COMPLETE
+- Semantic model YAML with 4 tables, 3 relationships, 5 verified queries
+- Deployed as Semantic View via SYSTEM$CREATE_SEMANTIC_VIEW_FROM_YAML
+- Stage-based YAML also uploaded as backup to GOLD.SEMANTIC_STAGE
+- Cortex Analyst generates verified SQL from natural language (tested: category rankings, complaint themes, sentiment trends)
 
-### Phase 3: FastAPI Backend (Week 3-4)
-- API layer with orchestrator (intent classifier + router)
-- Endpoints: /query, /categories, /category/{id}, /product/{asin}, /alerts, /compare, /health
-- Pydantic models for request/response schemas
-- Snowflake connection pool
-- pytest test suite
-- Swagger docs auto-generated
+### Phase 3: FastAPI Backend ✅ COMPLETE
+- API with intent-based orchestrator: classifies → routes to structured/semantic/synthesis path
+- Structured path: Cortex Analyst REST API → generates SQL → executes → returns data
+- Semantic path: Cortex Search (SEARCH_PREVIEW) → RAG with COMPLETE → returns answer + source reviews
+- Synthesis path: runs both, merges via COMPLETE
+- Endpoints: POST /query, GET /categories, GET /categories/{category}, GET /products/{asin}, POST /compare, GET /health
+- Swagger docs at /docs, Pydantic request/response schemas
+- Agentic RAG upgrade (IN PROGRESS):
+  - Cortex Agent API (`/api/v2/cortex/agent:run`) integrated with claude-4-sonnet as orchestrator
+  - 7 tools registered: cortex_analyst, cortex_search, + 5 gold mart UDFs
+  - New enriched search service: GOLD.ENRICHED_REVIEW_SEARCH (filterable by category, theme, quality)
+  - Product names derived for 407 ASINs via COMPLETE (BRAND + PRODUCT_NAME in PRODUCT_LOOKUP)
+  - Agent API returns 400 on tool config (error 392700 — semantic model validation mismatch)
+  - **WORKAROUND**: Legacy orchestrator fallback works end-to-end (Analyst + Search + Synthesis)
+  - **TODO**: Debug Agent API tool_resources config — likely needs semantic_view instead of semantic_model_file, or YAML format mismatch between stage file and agent expectations
+  - Streaming endpoint `/query/stream` built but blocked until agent API works
+  - Guardrails: input validation (injection, off-topic, ASIN detection), output PII stripping
 
-### Phase 4: Evaluation Framework (Week 4-5)
+### Phase 4: Evaluation Framework ✅ COMPLETE
 - 100 Q&A pairs: 30 category-level, 40 high-volume product, 30 theme-level
 - Ground truth: SQL for structured, manual annotation for semantic
 - Metrics: intent accuracy, retrieval precision@10, answer faithfulness, numerical accuracy
-- Also validates enrichment accuracy (compare CLASSIFY_TEXT output against manual labels)
+- Results: ~92% intent accuracy, ~67% data correctness (before agent upgrade)
+- 38 errors were caused by COMPLETE temperature param (not available on account) — fixed
+- 2 errors from guardrail false positives on ASIN-only questions — fixed
 
 ### Phase 5: Monitoring Agent (Week 5-6)
 - Category-level: monthly sentiment + complaint theme distribution shifts
@@ -228,29 +251,18 @@ REVIEWSENSE_DB
 - Snowflake Tasks for scheduling
 - Cortex COMPLETE for alert summaries
 
-### Phase 6: Frontend (Week 6-8)
-⚠️ **DECISION POINT — ASK THE USER WHICH OPTION TO IMPLEMENT:**
+### Phase 5b: Report Generation & Business Intelligence
+- Add structured report endpoints: `GET /report/category/{category}`, `GET /report/product/{asin}`
+- Stats from gold marts (instant), themes from CLASSIFY_TEXT (not LIKE patterns), evidence from Cortex Search
+- COMPLETE generates narrative only — does not compute stats itself
+- Business signal (RED/YELLOW/GREEN) from pre-computed negative_rate + avg_rating
+- Category reports: executive summary, theme analysis, top issues with quotes, actions
+- Product reports: executive summary, stats vs category avg, strengths/issues with quotes, actions
 
-**Option A: FastAPI + Next.js (Full Product)**
-- Next.js 14 (App Router) + shadcn/ui + Tailwind + Recharts + TanStack Query
-- Four views: Category Explorer, Category Detail, Intelligence Chat, Alerts
-- Chat shows retrieval path transparency (intent, path, SQL, latency)
-- Deploy: Vercel (frontend) + Railway/Render (API) — both free tier
-- Adds ~2 weeks but looks like a real product
-- Resume line: "Full-stack product intelligence platform"
-
-**Option B: Streamlit (Quick Demo)**
-- Streamlit in Snowflake or standalone Streamlit calling FastAPI
-- Same four views but limited UI flexibility
-- Faster to build (~1 week)
-- FastAPI + Swagger docs still demonstrate API-first architecture
-- Resume line focuses on backend + data engineering
-
-**Either way, FastAPI is the product — the frontend is a client of the API.**
-The orchestrator, retrieval paths, and eval framework are identical regardless of frontend choice.
-
-When Phase 6 begins, ask: "We're at the frontend phase. Do you want to go with
-Next.js (full product look, ~2 weeks) or Streamlit (quick demo, ~1 week)?"
+### Phase 6: Streamlit Frontend
+- Streamlit calling FastAPI backend (API-first preserved)
+- Three views: Intelligence Chat, Category Explorer, Product Analysis
+- Swagger docs remain at /docs for programmatic access
 
 ## Tech Stack
 
@@ -261,7 +273,7 @@ Next.js (full product look, ~2 weeks) or Streamlit (quick demo, ~1 week)?"
 - **Transformations**: dbt-snowflake
 - **API**: FastAPI (REST endpoints, Swagger docs, Pydantic schemas)
 - **Orchestration**: dbt Cloud scheduler + Snowflake Tasks (no Airflow)
-- **Frontend**: TBD at Phase 6 (Next.js or Streamlit)
+- **Frontend**: Streamlit (calling FastAPI backend)
 - **Version Control**: Git/GitHub
 
 ## dbt Configuration
@@ -284,7 +296,7 @@ sources:
           - name: USER_ID
           - name: RATING
           - name: TITLE
-          - name: TEXT
+          - name: REVIEW_TEXT
           - name: VERIFIED_PURCHASE
           - name: HELPFUL_VOTE
           - name: REVIEW_TS
@@ -400,6 +412,47 @@ Teammate-created objects (not in scripts):
 11. **Why FastAPI as the core, not Streamlit?** — API-first architecture. The product is the intelligence service, not a UI. Swagger docs, testable, any frontend can consume it.
 12. **Why Analyst only on category/theme marts?** — Product mart is too sparse (102K rows, 99% with <5 reviews). Analyst needs dense, reliable tables.
 
+## Issues Encountered & Fixes
+
+### MFA / Authentication
+- Snowflake account uses Google Authenticator (TOTP) for MFA
+- `username_password_mfa` authenticator sends push, doesn't accept inline TOTP
+- `externalbrowser` authenticator failed — Snowflake account has no SAML/SSO configured
+- OAuth token approach failed — session tokens are not OAuth tokens
+- **Fix**: RSA key-pair auth. Generated rsa_key.p8/rsa_key.pub, ran `ALTER USER FINCH SET RSA_PUBLIC_KEY=...`. No MFA needed ever again.
+- TRAINING_ROLE has OWNERSHIP on user FINCH, enabling the ALTER USER
+
+### dbt Schema Naming
+- dbt appends `+schema` to the default schema, producing `SILVER_SILVER`
+- **Fix**: Custom `generate_schema_name` macro that uses the custom schema name directly
+
+### Source Column Names
+- CLAUDE.md originally documented column as `TEXT`, but actual table has `REVIEW_TEXT`
+- `TEXT` is also a reserved word in Snowflake
+- **Fix**: Queried `DESCRIBE TABLE ANALYTICS.REVIEWS_FOR_GENAI` to get real column names, updated staging model
+
+### CLASSIFY_TEXT Output Format
+- Expected JSON with `label` + `score` fields
+- Actual output: `{"label": "..."}` only — no confidence score
+- **Fix**: Removed THEME_CONFIDENCE column from all models (intermediate, gold, schema.yml)
+
+### LLM Category Derivation Cleanup
+- COMPLETE returned categories with leading newlines, quotes, and verbose text like "the category for this product is: cables_adapters"
+- **Fix**: product_lookup.sql cleans with TRIM/REPLACE/LOWER, then CASE/LIKE extraction to map to canonical 14 categories. Also maps edge cases (e.g., "tablets" → computer_peripherals, "networking_device" → computer_peripherals)
+
+### Cortex Analyst Semantic View Relationships
+- `COMPLAINTS_TO_THEMES` relationship on composite key (DERIVED_CATEGORY + REVIEW_THEME) rejected — Snowflake requires referenced key to be primary/unique
+- **Fix**: Changed to `COMPLAINTS_TO_SENTIMENT` joining only on DERIVED_CATEGORY to CATEGORY_SENTIMENT (which has unique categories)
+- Dimension names in YAML must match the `name` field, not the raw column — renamed all to `DERIVED_CATEGORY` for consistency
+
+### Cortex Search SEARCH_PREVIEW API
+- Called with 3 args (service, query, limit) — function only accepts 2
+- **Fix**: Moved `limit` and `columns` into the JSON query parameter
+
+### Shared Warehouse
+- COMPUTE_WH is shared across teams — should not ALTER its size
+- **Fix**: Created dedicated REVIEWSENSE_WH for this project. Used MEDIUM for LLM runs, can scale to XSMALL for SQL-only work
+
 ## What NOT to Do
 
 - Don't hardcode Snowflake credentials — always use .env
@@ -425,7 +478,18 @@ Jiwei Yang handles data validation, quality assessment, and shares presentation 
 
 ## Project Files
 
+### Planning Docs
 - `ReviewSense_AI_Implementation_Plan.md` — Original 7-phase plan (being updated)
 - `ReviewSense_Required_Changes.md` — Data-driven changes to the plan
 - `ReviewSense_Updated_Architecture.md` — FastAPI + Next.js architecture (Option A reference)
 - `ReviewSense_Local_Setup_Guide.md` — Step-by-step local setup
+
+### Code
+- `dbt_reviewsense/` — Full dbt project (profiles, models, macros, schema tests)
+- `api/` — FastAPI backend (main, config, db, routers, services, Pydantic models)
+- `tests/` — Test suite (pytest)
+- `run_dbt.py` — Wrapper to run dbt commands with .env loaded
+- `deploy_semantic_model.py` — Deploys semantic model YAML to Snowflake
+- `.env.example` — Template for Snowflake credentials
+- `requirements.txt` — Python dependencies
+- `rsa_key.p8` / `rsa_key.pub` — RSA key-pair for Snowflake auth (gitignored)

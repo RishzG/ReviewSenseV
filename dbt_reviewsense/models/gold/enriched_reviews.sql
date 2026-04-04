@@ -20,6 +20,8 @@ SELECT
     e.REVIEW_THEME,
     e.REVIEW_SUMMARY,
     p.DERIVED_CATEGORY,
-    p.DERIVATION_CONFIDENCE
+    p.DERIVATION_CONFIDENCE,
+    p.BRAND,
+    p.PRODUCT_NAME
 FROM {{ ref('int_enriched_reviews') }} e
 LEFT JOIN {{ ref('product_lookup') }} p ON e.ASIN = p.ASIN

@@ -48,9 +48,60 @@ extracted AS (
     FROM raw_categories
 )
 
+-- Clean product names: strip "Brand - " prefix, newlines, verbose text
+, cleaned_names AS (
+    SELECT
+        ASIN,
+        -- Clean the raw name: strip newlines, trim
+        TRIM(REPLACE(RAW_PRODUCT_NAME, '\n', '')) AS CLEAN_RAW,
+        -- Extract brand and product name from "Brand - Product Name" format
+        -- Handle cases like "Brand - Amazon - Echo Dot" by removing "Brand - " prefix first
+        CASE
+            WHEN TRIM(REPLACE(RAW_PRODUCT_NAME, '\n', '')) LIKE 'Brand -%'
+            THEN TRIM(REPLACE(RAW_PRODUCT_NAME, '\n', ''))
+            ELSE TRIM(REPLACE(RAW_PRODUCT_NAME, '\n', ''))
+        END AS NORMALIZED
+    FROM {{ ref('int_product_names') }}
+),
+
+final_names AS (
+    SELECT
+        ASIN,
+        -- Remove "Brand - " and "Product Name: " prefixes
+        REGEXP_REPLACE(
+            REGEXP_REPLACE(
+                REGEXP_REPLACE(NORMALIZED, '^Brand\\s*-\\s*', ''),
+                'Product Name:\\s*', ''
+            ),
+            '^Based on.*$', ''
+        ) AS CLEANED_NAME
+    FROM cleaned_names
+),
+
+parsed_names AS (
+    SELECT
+        ASIN,
+        CASE
+            WHEN CLEANED_NAME LIKE '%-%' AND LENGTH(CLEANED_NAME) < 100
+            THEN TRIM(SPLIT_PART(CLEANED_NAME, '-', 1))
+            ELSE 'Unknown'
+        END AS BRAND,
+        CASE
+            WHEN CLEANED_NAME LIKE '%-%' AND LENGTH(CLEANED_NAME) < 100
+            THEN TRIM(SUBSTR(CLEANED_NAME, POSITION('-' IN CLEANED_NAME) + 1))
+            WHEN LENGTH(CLEANED_NAME) < 100
+            THEN TRIM(CLEANED_NAME)
+            ELSE NULL
+        END AS PRODUCT_NAME
+    FROM final_names
+)
+
 SELECT
-    ASIN,
-    DERIVED_CATEGORY,
-    REVIEW_COUNT,
-    DERIVATION_CONFIDENCE
-FROM extracted
+    e.ASIN,
+    e.DERIVED_CATEGORY,
+    e.REVIEW_COUNT,
+    e.DERIVATION_CONFIDENCE,
+    p.BRAND,
+    p.PRODUCT_NAME
+FROM extracted e
+LEFT JOIN parsed_names p ON e.ASIN = p.ASIN

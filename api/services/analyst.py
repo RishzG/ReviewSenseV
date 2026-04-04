@@ -1,9 +1,8 @@
 """Structured path: Cortex Analyst for quantitative queries."""
 
-import json
 import requests
 import snowflake.connector
-from api.db import get_connection
+from api.db import get_connection, return_connection
 from api.config import settings
 
 
@@ -59,4 +58,4 @@ def query_analyst(question: str) -> dict:
             "sources": None,
         }
     finally:
-        conn.close()
+        return_connection(conn)

@@ -29,8 +29,10 @@ def query_synthesis(question: str) -> dict:
 
 {semantic_context}
 
-Provide a comprehensive answer that combines the quantitative data with specific review examples.
-Be concise but thorough."""
+Be precise and factual. Do not add creative elaboration.
+Combine the quantitative data with specific review examples into a clear answer.
+Use the exact numbers from the data. Reference what reviewers actually said.
+Do not invent statistics or reviews not present above."""
 
     with get_cursor() as cur:
         cur.execute(
