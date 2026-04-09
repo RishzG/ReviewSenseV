@@ -267,6 +267,39 @@ if page == "Intelligence Chat":
 
     if "chat_history" not in st.session_state:
         st.session_state.chat_history = []
+    if "session_context" not in st.session_state:
+        st.session_state.session_context = {
+            "products_discussed": [],
+            "categories_discussed": [],
+            "brands_discussed": [],
+        }
+
+    def _extract_context_from_response(result):
+        """Extract products, categories, brands mentioned in the response."""
+        import re
+        answer = result.get("answer", "")
+        data = result.get("data") or []
+
+        # Extract ASINs from answer or data
+        asins = re.findall(r'\bB0[A-Z0-9]{8,}\b', answer)
+        for row in data:
+            for v in row.values():
+                if isinstance(v, str) and re.match(r'^B0[A-Z0-9]{8,}$', v):
+                    asins.append(v)
+
+        # Extract categories from data
+        categories = []
+        for row in data:
+            cat = row.get("DERIVED_CATEGORY") or row.get("derived_category")
+            if cat and isinstance(cat, str):
+                categories.append(cat)
+
+        # Extract brands from answer
+        known_brands = ['amazon', 'logitech', 'sony', 'samsung', 'anker', 'bose',
+                        'apple', 'senso', 'jbl', 'canon', 'panasonic', 'ring']
+        brands = [b for b in known_brands if b.lower() in answer.lower()]
+
+        return asins, categories, brands
 
     # Display chat history
     for msg in st.session_state.chat_history:
@@ -280,12 +313,39 @@ if page == "Intelligence Chat":
                 if msg.get("meta"):
                     meta = msg["meta"]
 
-                    # Intent + latency badge inline
-                    intent = meta.get("intent", "—")
-                    latency = meta.get("latency_ms", 0)
-                    intent_icon = {"structured": "📊", "semantic": "🔍", "synthesis": "🔄"}.get(
-                        intent.split(" ")[0] if intent else "", "🤖")
-                    st.caption(f"{intent_icon} {intent}  |  {latency:.0f}ms")
+                    # Tool trace (Claude Code / Copilot style)
+                    tool_trace = meta.get("tool_trace")
+                    if tool_trace:
+                        tool_icons = {
+                            "intent_classifier": "🧠",
+                            "cortex_analyst": "📊",
+                            "cortex_search": "🔍",
+                            "cortex_complete": "✨",
+                        }
+                        for step in tool_trace:
+                            icon = tool_icons.get(step["tool"], "⚙️")
+                            status_icon = {"done": "✅", "running": "⏳", "error": "❌"}.get(step["status"], "")
+                            summary = f' — {step["result_summary"]}' if step.get("result_summary") else ""
+                            st.markdown(
+                                f'<div style="color: #64748b; font-size: 13px; padding: 2px 0; '
+                                f'border-left: 2px solid #334155; padding-left: 10px; margin: 2px 0;">'
+                                f'{icon} {step["description"]}{summary} {status_icon}</div>',
+                                unsafe_allow_html=True
+                            )
+                        # Latency at end of trace
+                        latency = meta.get("latency_ms", 0)
+                        st.markdown(
+                            f'<div style="color: #475569; font-size: 12px; margin-top: 4px;">'
+                            f'Completed in {latency:.0f}ms</div>',
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        # Fallback: just show intent + latency
+                        intent = meta.get("intent", "—")
+                        latency = meta.get("latency_ms", 0)
+                        intent_icon = {"structured": "📊", "semantic": "🔍", "synthesis": "🔄"}.get(
+                            intent.split(" ")[0] if intent else "", "🤖")
+                        st.caption(f"{intent_icon} {intent}  |  {latency:.0f}ms")
 
                     # Data table for structured queries
                     if meta.get("data") and isinstance(meta["data"], list) and len(meta["data"]) > 0:
@@ -314,7 +374,19 @@ if page == "Intelligence Chat":
         st.session_state.chat_history.append({"role": "user", "content": question})
 
         with st.spinner("Analyzing..."):
-            result = api_post("/query", {"question": question})
+            # Build conversation history (last 3 exchanges)
+            history = []
+            for msg in st.session_state.chat_history[-6:]:
+                if msg["role"] in ("user", "assistant"):
+                    content = msg.get("content", "")
+                    history.append({"role": msg["role"], "content": content[:500]})
+
+            payload = {
+                "question": question,
+                "conversation_history": history if history else None,
+                "session_context": st.session_state.session_context,
+            }
+            result = api_post("/query", payload)
 
         if "error" in result:
             answer = f"Error: {result['error']}"
@@ -328,7 +400,18 @@ if page == "Intelligence Chat":
                 "data": result.get("data"),
                 "sources": result.get("sources"),
                 "tools_used": result.get("tools_used"),
+                "tool_trace": result.get("tool_trace"),
             }
+
+            # Update session context with entities from this response
+            asins, categories, brands = _extract_context_from_response(result)
+            ctx = st.session_state.session_context
+            ctx["products_discussed"].extend(asins)
+            ctx["categories_discussed"].extend(categories)
+            ctx["brands_discussed"].extend(brands)
+            ctx["products_discussed"] = list(dict.fromkeys(ctx["products_discussed"]))[-10:]
+            ctx["categories_discussed"] = list(dict.fromkeys(ctx["categories_discussed"]))[-10:]
+            ctx["brands_discussed"] = list(dict.fromkeys(ctx["brands_discussed"]))[-10:]
 
         st.session_state.chat_history.append({"role": "assistant", "content": answer, "meta": meta})
         st.rerun()

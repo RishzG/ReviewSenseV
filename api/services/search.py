@@ -6,13 +6,20 @@ from api.config import settings
 
 
 def query_search(question: str, limit: int = 5) -> dict:
+    import re
+
     with get_cursor() as cur:
-        # Use Cortex Search to find relevant reviews
-        search_query = json.dumps({
+        # Auto-detect ASIN in question and add as filter
+        search_params = {
             "query": question,
             "columns": ["REVIEW_TEXT_CLEAN", "RATING", "ASIN"],
             "limit": limit,
-        })
+        }
+        asin_match = re.search(r'\bB0[A-Z0-9]{8,}\b', question)
+        if asin_match:
+            search_params["filter"] = {"@eq": {"ASIN": asin_match.group(0)}}
+
+        search_query = json.dumps(search_params)
         cur.execute(
             f"""
             SELECT PARSE_JSON(

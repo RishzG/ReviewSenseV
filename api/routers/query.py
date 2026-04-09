@@ -22,7 +22,11 @@ def query(request: QueryRequest):
     - Falls back to legacy orchestrator if agent is unavailable
     """
     try:
-        result = route_query(request.question)
+        result = route_query(
+            request.question,
+            conversation_history=request.conversation_history,
+            session_context=request.session_context,
+        )
         return QueryResponse(**result)
     except GuardrailError as e:
         raise HTTPException(status_code=400, detail=e.message)
@@ -35,7 +39,8 @@ def query_stream(request: QueryRequest):
     Returns Server-Sent Events (SSE) with real-time tool usage and answer generation.
     """
     try:
-        check_input(request.question)
+        has_history = bool(request.conversation_history and len(request.conversation_history) > 0)
+        check_input(request.question, has_conversation_history=has_history)
     except GuardrailError as e:
         raise HTTPException(status_code=400, detail=e.message)
 

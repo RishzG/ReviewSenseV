@@ -4,6 +4,13 @@ from pydantic import BaseModel
 from typing import Any
 
 
+class ToolStep(BaseModel):
+    tool: str
+    description: str
+    status: str  # "running", "done", "error"
+    result_summary: str | None = None
+
+
 class QueryResponse(BaseModel):
     question: str
     intent: str  # "agent", "structured", "semantic", "synthesis"
@@ -12,6 +19,7 @@ class QueryResponse(BaseModel):
     data: list[dict[str, Any]] | None = None
     sources: list[dict[str, Any]] | None = None
     tools_used: list[str] | None = None
+    tool_trace: list[ToolStep] | None = None
     fallback: bool = False
     latency_ms: float
 

@@ -76,8 +76,13 @@ class GuardrailError(Exception):
         super().__init__(message)
 
 
-def check_input(question: str) -> None:
-    """Validate user input. Raises GuardrailError if blocked."""
+def check_input(question: str, has_conversation_history: bool = False) -> None:
+    """Validate user input. Raises GuardrailError if blocked.
+
+    Args:
+        question: The raw user question
+        has_conversation_history: If True, skip off-topic check (follow-ups are inherently on-topic)
+    """
 
     # Length check
     if len(question.strip()) < 3:
@@ -95,7 +100,10 @@ def check_input(question: str) -> None:
                 "prompt_injection"
             )
 
-    # Off-topic check — also allow ASIN references (B0... pattern)
+    # Off-topic check — skip if mid-conversation (follow-ups are inherently on-topic)
+    if has_conversation_history:
+        return
+
     has_asin = bool(re.search(r'\bB0[A-Z0-9]{8,}\b', question))
     if not has_asin and not any(kw in q_lower for kw in ON_TOPIC_KEYWORDS):
         raise GuardrailError(

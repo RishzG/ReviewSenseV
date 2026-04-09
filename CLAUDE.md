@@ -244,25 +244,58 @@ REVIEWSENSE_DB
 - 38 errors were caused by COMPLETE temperature param (not available on account) — fixed
 - 2 errors from guardrail false positives on ASIN-only questions — fixed
 
-### Phase 5: Monitoring Agent (Week 5-6)
-- Category-level: monthly sentiment + complaint theme distribution shifts
-- Theme-level: cross-category complaint trend detection
-- Product-level: only top ~20 ASINs with 100+ reviews
-- Snowflake Tasks for scheduling
-- Cortex COMPLETE for alert summaries
+### Phase 5: Monitoring Agent ✅ COMPLETE
+- 5 dbt monitoring models: review_anomalies (94 anomalies), cross_category_alerts (6), emerging_themes (18), product_anomalies (1), data_quality_checks (9)
+- Anomaly types: RATING_DROP, SENTIMENT_SHIFT, COMPLAINT_SPIKE, DECLINING_TREND, RANK_DROP
+- Z-score based thresholds (adapts to each category's variance)
+- Snowflake objects: ALERT_LOG table, stream, GENERATE_ALERTS() stored procedure, weekly scheduled task
+- AI-generated alert summaries via CORTEX.COMPLETE
+- API endpoints: GET /alerts, POST /alerts/analyze, PATCH /alerts/{id}/acknowledge
+- 105 alerts generated: 20 HIGH, 23 MEDIUM, 62 LOW severity
 
-### Phase 5b: Report Generation & Business Intelligence
-- Add structured report endpoints: `GET /report/category/{category}`, `GET /report/product/{asin}`
-- Stats from gold marts (instant), themes from CLASSIFY_TEXT (not LIKE patterns), evidence from Cortex Search
-- COMPLETE generates narrative only — does not compute stats itself
-- Business signal (RED/YELLOW/GREEN) from pre-computed negative_rate + avg_rating
-- Category reports: executive summary, theme analysis, top issues with quotes, actions
-- Product reports: executive summary, stats vs category avg, strengths/issues with quotes, actions
+### Phase 5b: Report Generation & Business Intelligence ✅ COMPLETE
+- Category + product report generation via gold marts + Cortex Search evidence + COMPLETE narrative
+- RED/YELLOW/GREEN business signals from pre-computed negative_rate + avg_rating
+- API: GET /report/category/{category}, GET /report/product/{asin}
+- Stats comparison vs overall/category average with delta indicators
 
-### Phase 6: Streamlit Frontend
-- Streamlit calling FastAPI backend (API-first preserved)
-- Three views: Intelligence Chat, Category Explorer, Product Analysis
-- Swagger docs remain at /docs for programmatic access
+### Phase 6: Streamlit Frontend ✅ COMPLETE
+- 5 pages: Intelligence Chat, Category Explorer, Product Analysis, Business Intelligence, Monitoring & Alerts
+- Dark theme with purple/cyan/rose Plotly charts
+- Chat with markdown rendering, review cards with color-coded ratings
+- BI reports with signal badges, theme/complaint charts, customer evidence
+- Alert dashboard with severity filtering, on-demand analysis
+
+### Phase 7: Product Metadata Enrichment ✅ COMPLETE
+- McAuley Electronics metadata loaded: 786,445 products into RAW.PRODUCT_METADATA_RAW (VARIANT)
+- CURATED.PRODUCT_METADATA view extracts: ASIN, title, brand, price, category, features, description, rank
+- ASIN overlap: 25,408 of 102K review ASINs (24.8%) have real metadata
+- PRODUCT_LOOKUP updated: COALESCE(real metadata, LLM-derived) fallback pattern
+- 3,323 of 12K categorized ASINs enriched with real title, brand, price, features
+- CURATED.V_BRAND_SUMMARY view for brand-level analysis
+- Scraping script for 282 missing top-product ASINs (Amazon product pages)
+
+### Phase 8: Custom Agentic RAG (IN PROGRESS)
+Custom agent loop with purpose-built tools — NOT a wrapper over Snowflake's Agent API.
+COMPLETE plans which tools to call, our code executes them, COMPLETE synthesizes the answer.
+
+**Tools (build order):**
+1. `search_reviews` (enhanced) — Cortex Search with ASIN/rating/theme/category filters
+2. `get_product_detail` — metadata + review stats combined
+3. `search_products` — find products by price/features/brand/category criteria
+4. `compare_products` — side-by-side product comparison
+5. `verify_claims` — compare metadata feature claims vs review reality (differentiator)
+6. `get_brand_analysis` + `compare_brands` — brand-level competitive intelligence
+7. Agent loop — planning + execution + synthesis
+8. Evaluation — unit tests per tool + agent integration tests + 20-30 new eval questions
+
+**What makes this original work:**
+- Tool implementations (SQL + Python logic) — ours
+- Agent planning prompt + loop — ours
+- Claim verification algorithm — ours
+- Product recommendation matching — ours
+- Brand competitive analysis — ours
+- Snowflake provides: COMPLETE (LLM), Cortex Search, Cortex Analyst
 
 ## Tech Stack
 

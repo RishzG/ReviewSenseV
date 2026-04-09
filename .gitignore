@@ -12,10 +12,20 @@ __pycache__/
 rsa_key.p8
 rsa_key.pub
 
-# dbt
+# Snowflake dbt
 target/
 dbt_packages/
 logs/
+dbt_reviewsense/logs/
+dbt_reviewsense/target/
+
+# Large data files (do NOT commit)
+*.json.gz
+data/scraped_metadata.json
+data/asins_to_scrape.txt
+
+# Eval results (regenerated per run)
+eval/eval_results.json
 
 # IDE
 .vscode/
@@ -24,3 +34,8 @@ logs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Claude Code
+.claude/settings.local.json
+docs/Checks and git guardian.litcoffee
+docs/Untitled-1.litcoffee
