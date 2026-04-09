@@ -1,8 +1,12 @@
 """Semantic path: Cortex Search Service for qualitative queries (RAG)."""
 
 import json
+import html as html_lib
+import logging
 from api.db import get_cursor
 from api.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def query_search(question: str, limit: int = 5) -> dict:
@@ -51,7 +55,7 @@ def query_search(question: str, limit: int = 5) -> dict:
             text = r.get("REVIEW_TEXT_CLEAN", "")
             rating = r.get("RATING", "")
             asin = r.get("ASIN", "")
-            context_parts.append(f"<review rating='{rating}'>{text}</review>")
+            context_parts.append(f"<review rating='{html_lib.escape(str(rating))}'>{html_lib.escape(text)}</review>")
             sources.append({"asin": asin, "rating": rating, "text": text[:200]})
 
         context = "\n---\n".join(context_parts)

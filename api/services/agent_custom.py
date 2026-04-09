@@ -141,7 +141,10 @@ def _plan_tools(question: str) -> list[dict] | None:
         plan = json.loads(json_match.group(0))
         steps = plan.get("steps", [])
 
-        # Validate plan
+        # Validate plan structure
+        if not isinstance(steps, list):
+            logger.warning(f"Invalid plan: 'steps' is not a list: {type(steps)}")
+            return None
         if not steps or len(steps) > 5:
             logger.warning(f"Invalid plan: {len(steps) if steps else 0} steps")
             return None
@@ -271,11 +274,19 @@ def _execute_plan(steps: list[dict]) -> list[dict]:
                 future = executor.submit(_execute_single_tool, steps[step_idx])
                 futures[future] = step_idx
 
-            for future in as_completed(futures):
+            for future in as_completed(futures, timeout=30):
                 idx = futures[future]
-                result = future.result()
-                result["wave"] = wave_num + 1
-                all_results[idx] = result
+                try:
+                    result = future.result(timeout=5)
+                    result["wave"] = wave_num + 1
+                    all_results[idx] = result
+                except Exception as e:
+                    logger.error(f"Tool execution timed out or failed: {e}")
+                    all_results[idx] = {
+                        "tool": steps[idx].get("tool"), "result": {"error": str(e)[:200]},
+                        "purpose": steps[idx].get("purpose", ""), "status": "timeout",
+                        "wave": wave_num + 1,
+                    }
 
     return [r for r in all_results if r is not None]
 

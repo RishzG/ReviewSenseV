@@ -291,15 +291,31 @@ COMPLETE plans which tools to call, our code executes them, COMPLETE synthesizes
 3. `search_products` ✅ — SQL on metadata + gold marts. Filter by price, brand, features, category, rating. Sort by review_count/rating/price/sentiment. 12/12 tests passing.
 4. `compare_products` ✅ — Calls get_product_detail per ASIN. Computes metric deltas, identifies winners, aggregates win counts, theme comparison. 8 tests.
 
-**Tools planned:**
-5. `verify_claims` — EXTRACT_ANSWER + Search + COMPLETE verdict. Compare metadata feature claims vs review reality.
-6. `get_brand_analysis` + `compare_brands` — brand-level competitive intelligence from metadata + reviews.
-7. `find_similar_products` — uses also_buy metadata cross-references.
-8. `price_value_analysis` — price brackets vs sentiment correlation within categories.
+5. `verify_claims` ✅ — Search reviews per feature claim + COMPLETE verdict (CONFIRMED/DISPUTED/MIXED). Trust score. 3 tests passing.
+6. `get_brand_analysis` + `compare_brands` ✅ — Brand stats from metadata + reviews. Category breakdown, top products, top complaints per brand. 6 tests passing.
+7. `find_similar_products` ✅ — Uses also_buy metadata cross-references. 2 tests passing.
+8. `price_value_analysis` ✅ — Price brackets vs sentiment correlation within categories. 3 tests passing.
 
-**Agent loop (planned):**
-9. Plan-Execute-Synthesize loop in `api/services/agent_custom.py`
-10. Evaluation: unit tests per tool + agent integration tests + 20-30 new eval questions
+**Agent loop:** ✅ BUILT
+- `api/services/agent_custom.py` — Plan-Execute-Synthesize with tiered routing
+- Tier 1 (Fast Path): Rule-based, zero LLM cost for simple queries (ASIN lookup, stat questions)
+- Tier 2 (LLM Planning): COMPLETE plans tools → parallel execute → synthesize (2 LLM calls)
+- Parallelization: independent tools run concurrently via ThreadPoolExecutor (Ch 3)
+- Reflection: answer grounding verification after synthesis (Ch 4)
+- Safety: max 5 steps, 30s timeout per tool, plan validation, citation required
+
+**73 tests passing across all tools + guardrails.**
+
+**Production hardening (SRE audit fixes):**
+- SQL injection fixed in monitoring.py (parameterized LIMIT)
+- Request timeouts added to Cortex Analyst API calls (30s)
+- Tool execution timeouts in ThreadPoolExecutor (30s)
+- NULL safety in all router responses (float(None) → 0.0)
+- Logging added to db.py, analyst.py, search.py exception handlers
+- Prompt injection mitigation: html.escape on review text in RAG prompts
+- Agent JSON plan validation strengthened
+- Rate limiting: 10 req/min on /query via slowapi
+- Global error handler in main.py with structured error responses
 
 **Additional features built:**
 - Conversation memory: follow-up detection via keyword signals, session context tracking (products/brands/categories)

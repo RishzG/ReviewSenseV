@@ -44,8 +44,8 @@ def get_alerts(
             ORDER BY CASE SEVERITY WHEN 'HIGH' THEN 1 WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 3 END,
                      ABS(COALESCE(DEVIATION_SCORE, 0)) DESC,
                      CREATED_AT DESC
-            LIMIT {limit}
-        """, params)
+            LIMIT %s
+        """, params + [int(limit)])
 
         alerts = []
         for r in cur.fetchall():

@@ -28,6 +28,8 @@ def get_product(asin: str):
             )
         return ProductSummary(
             asin=row[0], derived_category=row[1], review_count=row[2],
-            avg_rating=float(row[3]), avg_sentiment=float(row[4]),
-            negative_rate=float(row[5]), top_theme=row[6],
+            avg_rating=float(row[3]) if row[3] is not None else 0.0,
+            avg_sentiment=float(row[4]) if row[4] is not None else 0.0,
+            negative_rate=float(row[5]) if row[5] is not None else 0.0,
+            top_theme=row[6],
         )

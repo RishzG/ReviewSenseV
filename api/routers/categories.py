@@ -19,8 +19,10 @@ def list_categories():
         """)
         return [
             CategorySummary(
-                derived_category=r[0], review_count=r[1], avg_rating=float(r[2]),
-                avg_sentiment=float(r[3]), negative_rate=float(r[4])
+                derived_category=r[0], review_count=r[1],
+                avg_rating=float(r[2]) if r[2] is not None else 0.0,
+                avg_sentiment=float(r[3]) if r[3] is not None else 0.0,
+                negative_rate=float(r[4]) if r[4] is not None else 0.0,
             )
             for r in cur.fetchall()
         ]
@@ -50,8 +52,10 @@ def get_category(category: str):
             ORDER BY REVIEW_COUNT DESC
         """, (category,))
         themes = [
-            {"theme": r[0], "review_count": r[1], "avg_rating": float(r[2]),
-             "avg_sentiment": float(r[3]), "negative_rate": float(r[4])}
+            {"theme": r[0], "review_count": r[1],
+             "avg_rating": float(r[2]) if r[2] is not None else 0.0,
+             "avg_sentiment": float(r[3]) if r[3] is not None else 0.0,
+             "negative_rate": float(r[4]) if r[4] is not None else 0.0}
             for r in cur.fetchall()
         ]
 
@@ -63,8 +67,9 @@ def get_category(category: str):
             ORDER BY COMPLAINT_COUNT DESC
         """, (category,))
         complaints = [
-            {"theme": r[0], "complaint_count": r[1], "avg_sentiment": float(r[2]),
-             "avg_helpful_votes": float(r[3])}
+            {"theme": r[0], "complaint_count": r[1],
+             "avg_sentiment": float(r[2]) if r[2] is not None else 0.0,
+             "avg_helpful_votes": float(r[3]) if r[3] is not None else 0.0}
             for r in cur.fetchall()
         ]
 
@@ -76,8 +81,10 @@ def get_category(category: str):
             ORDER BY REVIEW_MONTH
         """, (category,))
         trends = [
-            {"month": str(r[0]), "review_count": r[1], "avg_rating": float(r[2]),
-             "avg_sentiment": float(r[3]), "negative_rate": float(r[4])}
+            {"month": str(r[0]), "review_count": r[1],
+             "avg_rating": float(r[2]) if r[2] is not None else 0.0,
+             "avg_sentiment": float(r[3]) if r[3] is not None else 0.0,
+             "negative_rate": float(r[4]) if r[4] is not None else 0.0}
             for r in cur.fetchall()
         ]
 

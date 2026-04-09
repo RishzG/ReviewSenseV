@@ -1,8 +1,11 @@
 """Snowflake connection pool — reuses connections instead of creating new ones per request."""
 
+import logging
 import snowflake.connector
 from contextlib import contextmanager
 from threading import Lock
+
+logger = logging.getLogger(__name__)
 from api.config import settings
 
 _connection_params = {
@@ -32,8 +35,8 @@ def get_connection() -> snowflake.connector.SnowflakeConnection:
             try:
                 conn.cursor().execute("SELECT 1")
                 return conn
-            except Exception:
-                # Stale connection, discard
+            except Exception as e:
+                logger.warning(f"Stale connection removed from pool: {type(e).__name__}")
                 try:
                     conn.close()
                 except Exception:
