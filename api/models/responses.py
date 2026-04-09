@@ -11,6 +11,13 @@ class ToolStep(BaseModel):
     result_summary: str | None = None
 
 
+class Reflection(BaseModel):
+    grounded: bool = True
+    issues: list[str] = []
+    confidence: float = 0.5
+    summary: str = ""
+
+
 class QueryResponse(BaseModel):
     question: str
     intent: str  # "agent", "structured", "semantic", "synthesis"
@@ -20,6 +27,7 @@ class QueryResponse(BaseModel):
     sources: list[dict[str, Any]] | None = None
     tools_used: list[str] | None = None
     tool_trace: list[ToolStep] | None = None
+    reflection: Reflection | None = None
     fallback: bool = False
     latency_ms: float
 

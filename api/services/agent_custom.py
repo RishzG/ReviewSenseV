@@ -336,6 +336,92 @@ def _synthesize(question: str, tool_results: list[dict]) -> str:
 
 
 # ============================================
+# REFLECTION (Ch 4) — verify answer grounding
+# ============================================
+
+REFLECTION_PROMPT = """You are a quality verification agent. Check if the answer is properly grounded in the tool results.
+
+User question: {question}
+
+Generated answer:
+{answer}
+
+Tool results summary:
+{tool_summary}
+
+Check these criteria and respond with ONLY valid JSON:
+{{
+  "grounded": true/false,
+  "issues": ["list of any ungrounded claims or hallucinations"],
+  "confidence": 0.0-1.0,
+  "summary": "one sentence assessment"
+}}"""
+
+
+def _reflect(question: str, answer: str, tool_results: list[dict]) -> dict:
+    """Verify that the synthesized answer is grounded in tool results.
+
+    Checks: Are all claims supported by data? Any hallucinated stats?
+    Returns reflection dict with grounded flag and issues list.
+    """
+    # Build a summary of what the tools actually returned
+    tool_summary_parts = []
+    for r in tool_results:
+        if r["status"] == "done" and r.get("result"):
+            res = r["result"]
+            if isinstance(res, dict):
+                # Extract key facts from each tool result
+                facts = []
+                for key in ["avg_rating", "review_count", "negative_rate", "trust_score",
+                            "brand", "product_name", "result_count", "total_reviews"]:
+                    if key in res and res[key] is not None:
+                        facts.append(f"{key}={res[key]}")
+                if facts:
+                    tool_summary_parts.append(f"[{r['tool']}]: {', '.join(facts)}")
+                else:
+                    tool_summary_parts.append(f"[{r['tool']}]: returned data")
+
+    if not tool_summary_parts:
+        return {"grounded": False, "issues": ["No tool results to verify against"],
+                "confidence": 0.0, "summary": "Cannot verify — no data available"}
+
+    tool_summary = "\n".join(tool_summary_parts)
+
+    prompt = REFLECTION_PROMPT.format(
+        question=question,
+        answer=answer[:1000],  # truncate long answers
+        tool_summary=tool_summary,
+    )
+
+    try:
+        with get_cursor() as cur:
+            cur.execute(
+                "SELECT SNOWFLAKE.CORTEX.COMPLETE(%s, %s)",
+                (settings.llm_model, prompt)
+            )
+            response = cur.fetchone()[0].strip()
+
+        json_match = re.search(r'\{.*\}', response, re.DOTALL)
+        if json_match:
+            reflection = json.loads(json_match.group(0))
+            return {
+                "grounded": reflection.get("grounded", True),
+                "issues": reflection.get("issues", []),
+                "confidence": reflection.get("confidence", 0.5),
+                "summary": reflection.get("summary", "Verification complete"),
+            }
+        else:
+            return {"grounded": True, "issues": [], "confidence": 0.5,
+                    "summary": "Verification inconclusive"}
+
+    except Exception as e:
+        logger.warning(f"Reflection failed: {e}")
+        # Don't block the answer — reflection is advisory, not blocking
+        return {"grounded": True, "issues": [], "confidence": 0.5,
+                "summary": "Reflection skipped due to error"}
+
+
+# ============================================
 # BUILD RESPONSE
 # ============================================
 
@@ -444,9 +530,22 @@ def run_custom_agent(question: str) -> dict:
     # Synthesize
     answer = _synthesize(question, tool_results)
 
+    # Reflect — verify answer is grounded in tool results
+    reflection = _reflect(question, answer, tool_results)
+
     # Build response
     response = _build_response(question, tool_results)
     response["answer"] = answer
+    response["reflection"] = reflection
     response["latency_ms"] = round((time.time() - start) * 1000, 1)
+
+    # Add reflection to tool trace
+    if response.get("tool_trace"):
+        response["tool_trace"].append({
+            "tool": "reflection",
+            "description": "Verifying answer is grounded in tool results",
+            "status": "done",
+            "result_summary": reflection.get("summary", "Verified"),
+        })
 
     return response
