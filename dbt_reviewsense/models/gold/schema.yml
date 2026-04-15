@@ -1,0 +1,54 @@
+version: 2
+
+models:
+  - name: product_lookup
+    description: >
+      ASIN to derived product category mapping. One row per ASIN.
+      Only includes ASINs with 3+ reviews.
+    columns:
+      - name: ASIN
+        tests:
+          - unique
+          - not_null
+      - name: DERIVED_CATEGORY
+        tests:
+          - not_null
+
+  - name: enriched_reviews
+    description: >
+      Main fact table: all reviews with AI enrichment (sentiment, theme,
+      summary) joined with derived product categories.
+    columns:
+      - name: REVIEW_ID
+        tests:
+          - unique
+          - not_null
+
+  - name: category_sentiment_summary
+    description: >
+      Tier 1 aggregation: category-level sentiment and rating stats.
+      For Cortex Analyst semantic model.
+    columns:
+      - name: DERIVED_CATEGORY
+        tests:
+          - unique
+          - not_null
+
+  - name: category_monthly_trends
+    description: >
+      Tier 1 time-series: monthly sentiment and rating trends per category.
+      For Cortex Analyst semantic model.
+
+  - name: product_sentiment_summary
+    description: >
+      Tier 2 aggregation: product-level stats for ASINs with 20+ reviews only.
+      NOT included in Cortex Analyst — accessed via direct SQL.
+
+  - name: theme_category_analysis
+    description: >
+      Tier 3 cross-analysis: theme x category breakdown.
+      For Cortex Analyst semantic model.
+
+  - name: complaint_analysis
+    description: >
+      Category-level complaint breakdown (rating 1-2 only) by theme.

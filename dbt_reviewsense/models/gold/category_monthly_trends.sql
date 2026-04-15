@@ -1,0 +1,17 @@
+-- Tier 1: Category-level monthly time-series trends
+-- For Cortex Analyst: "How has headphone sentiment changed over time?"
+
+{{ config(materialized='table') }}
+
+SELECT
+    DERIVED_CATEGORY,
+    DATE_TRUNC('MONTH', REVIEW_TS) AS REVIEW_MONTH,
+    COUNT(*) AS REVIEW_COUNT,
+    ROUND(AVG(RATING), 2) AS AVG_RATING,
+    ROUND(AVG(SENTIMENT_SCORE), 4) AS AVG_SENTIMENT,
+    COUNT(CASE WHEN RATING <= 2 THEN 1 END) AS NEGATIVE_REVIEW_COUNT,
+    ROUND(COUNT(CASE WHEN RATING <= 2 THEN 1 END)::FLOAT / NULLIF(COUNT(*), 0), 4) AS NEGATIVE_RATE
+FROM {{ ref('enriched_reviews') }}
+WHERE DERIVED_CATEGORY IS NOT NULL
+GROUP BY DERIVED_CATEGORY, DATE_TRUNC('MONTH', REVIEW_TS)
+HAVING COUNT(*) >= 5

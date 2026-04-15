@@ -1,0 +1,28 @@
+name: 'reviewsense'
+version: '1.0.0'
+config-version: 2
+
+profile: 'reviewsense'
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+test-paths: ["tests"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  reviewsense:
+    staging:
+      +schema: SILVER
+      +materialized: view
+    intermediate:
+      +schema: SILVER
+      +materialized: table
+    gold:
+      +schema: GOLD
+      +materialized: table
+    monitoring:
+      +schema: GOLD
+      +materialized: table
