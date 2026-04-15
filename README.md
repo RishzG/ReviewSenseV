@@ -21,8 +21,8 @@ See [docs/architecture_diagram.md](docs/architecture_diagram.md) for the full sy
 
 ```bash
 # 1. Clone and setup
-git clone https://github.com/RishzG/ReviewSenseV.git
-cd ReviewSenseV
+git clone https://github.com/JIWEI-Y6/reviewsense-ai.git
+cd reviewsense-ai
 python -m venv venv
 source venv/Scripts/activate  # Windows
 pip install -r requirements.txt
