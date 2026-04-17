@@ -1,0 +1,20 @@
+-- Tier 2: Product-level sentiment summary
+-- ONLY for ASINs with 20+ reviews (~300 products)
+-- NOT included in Cortex Analyst semantic model (too sparse)
+
+{{ config(materialized='table') }}
+
+SELECT
+    ASIN,
+    DERIVED_CATEGORY,
+    COUNT(*) AS REVIEW_COUNT,
+    ROUND(AVG(RATING), 2) AS AVG_RATING,
+    ROUND(AVG(SENTIMENT_SCORE), 4) AS AVG_SENTIMENT,
+    COUNT(CASE WHEN RATING <= 2 THEN 1 END) AS NEGATIVE_REVIEW_COUNT,
+    ROUND(COUNT(CASE WHEN RATING <= 2 THEN 1 END)::FLOAT / COUNT(*), 4) AS NEGATIVE_RATE,
+    COUNT(CASE WHEN VERIFIED_PURCHASE = TRUE THEN 1 END) AS VERIFIED_COUNT,
+    ROUND(AVG(HELPFUL_VOTE), 2) AS AVG_HELPFUL_VOTES,
+    MODE(REVIEW_THEME) AS TOP_THEME
+FROM {{ ref('enriched_reviews') }}
+GROUP BY ASIN, DERIVED_CATEGORY
+HAVING COUNT(*) >= 20

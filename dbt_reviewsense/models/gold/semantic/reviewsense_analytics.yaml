@@ -1,0 +1,302 @@
+name: REVIEWSENSE_ANALYTICS
+description: "ReviewSense product review analytics — sentiment, trends, themes, and complaints by product category"
+
+tables:
+  - name: CATEGORY_SENTIMENT
+    description: "Overall sentiment summary per product category (14 categories)"
+    base_table:
+      database: REVIEWSENSE_DB
+      schema: GOLD
+      table: CATEGORY_SENTIMENT_SUMMARY
+    dimensions:
+      - name: DERIVED_CATEGORY
+        synonyms: ["product category", "category name", "product type", "category"]
+        description: "AI-derived product category (e.g., headphones_earbuds, speakers, cables_adapters)"
+        expr: DERIVED_CATEGORY
+        data_type: VARCHAR
+        unique: true
+        is_enum: true
+        sample_values:
+          - "headphones_earbuds"
+          - "speakers"
+          - "cables_adapters"
+          - "chargers_batteries"
+          - "phone_accessories"
+          - "computer_peripherals"
+          - "smart_home"
+          - "streaming_devices"
+          - "storage_media"
+          - "cameras_accessories"
+          - "tv_accessories"
+          - "gaming_accessories"
+          - "wearables"
+          - "other_electronics"
+    facts:
+      - name: REVIEW_COUNT
+        description: "Total number of reviews for this category"
+        expr: REVIEW_COUNT
+        data_type: NUMBER
+      - name: AVG_RATING
+        description: "Average star rating (1-5)"
+        expr: AVG_RATING
+        data_type: NUMBER
+      - name: AVG_SENTIMENT
+        description: "Average sentiment score (-1 to 1)"
+        expr: AVG_SENTIMENT
+        data_type: NUMBER
+      - name: MEDIAN_SENTIMENT
+        description: "Median sentiment score (-1 to 1)"
+        expr: MEDIAN_SENTIMENT
+        data_type: NUMBER
+      - name: NEGATIVE_REVIEW_COUNT
+        description: "Number of reviews rated 1-2 stars"
+        expr: NEGATIVE_REVIEW_COUNT
+        data_type: NUMBER
+      - name: POSITIVE_REVIEW_COUNT
+        description: "Number of reviews rated 4-5 stars"
+        expr: POSITIVE_REVIEW_COUNT
+        data_type: NUMBER
+      - name: NEGATIVE_RATE
+        description: "Percentage of negative reviews (0-1 scale)"
+        expr: NEGATIVE_RATE
+        data_type: NUMBER
+      - name: VERIFIED_COUNT
+        description: "Number of verified purchase reviews"
+        expr: VERIFIED_COUNT
+        data_type: NUMBER
+      - name: AVG_HELPFUL_VOTES
+        description: "Average helpful votes per review"
+        expr: AVG_HELPFUL_VOTES
+        data_type: NUMBER
+    metrics:
+      - name: TOTAL_REVIEWS_ALL_CATEGORIES
+        synonyms: ["total reviews"]
+        description: "Sum of reviews across all categories"
+        expr: SUM(REVIEW_COUNT)
+      - name: OVERALL_AVG_RATING
+        synonyms: ["average rating"]
+        description: "Weighted average rating across categories"
+        expr: "SUM(AVG_RATING * REVIEW_COUNT) / NULLIF(SUM(REVIEW_COUNT), 0)"
+      - name: OVERALL_NEGATIVE_RATE
+        description: "Overall negative review percentage"
+        expr: "SUM(NEGATIVE_REVIEW_COUNT) * 1.0 / NULLIF(SUM(REVIEW_COUNT), 0)"
+    filters:
+      - name: HIGH_NEGATIVE_CATEGORIES
+        synonyms: ["problematic categories"]
+        description: "Categories with negative rate above 15%"
+        expr: "NEGATIVE_RATE > 0.15"
+
+  - name: MONTHLY_TRENDS
+    description: "Monthly review trends per product category (1715 rows)"
+    base_table:
+      database: REVIEWSENSE_DB
+      schema: GOLD
+      table: CATEGORY_MONTHLY_TRENDS
+    dimensions:
+      - name: DERIVED_CATEGORY
+        synonyms: ["product category", "category"]
+        description: "Product category for trend analysis"
+        expr: DERIVED_CATEGORY
+        data_type: VARCHAR
+    time_dimensions:
+      - name: REVIEW_MONTH
+        synonyms: ["month", "date", "time period"]
+        description: "Month of the reviews (YYYY-MM-01 format)"
+        expr: REVIEW_MONTH
+        data_type: DATE
+        unique: false
+    facts:
+      - name: MONTHLY_REVIEW_COUNT
+        description: "Number of reviews in this month"
+        expr: REVIEW_COUNT
+        data_type: NUMBER
+      - name: MONTHLY_AVG_RATING
+        description: "Average rating for this month"
+        expr: AVG_RATING
+        data_type: NUMBER
+      - name: MONTHLY_AVG_SENTIMENT
+        description: "Average sentiment score for this month"
+        expr: AVG_SENTIMENT
+        data_type: NUMBER
+      - name: MONTHLY_NEGATIVE_COUNT
+        description: "Negative reviews in this month"
+        expr: NEGATIVE_REVIEW_COUNT
+        data_type: NUMBER
+      - name: MONTHLY_NEGATIVE_RATE
+        description: "Negative review percentage for this month"
+        expr: NEGATIVE_RATE
+        data_type: NUMBER
+    metrics:
+      - name: TOTAL_MONTHLY_REVIEWS
+        description: "Total reviews for selected period"
+        expr: SUM(REVIEW_COUNT)
+      - name: AVG_MONTHLY_RATING
+        description: "Average rating for selected period"
+        expr: "SUM(AVG_RATING * REVIEW_COUNT) / NULLIF(SUM(REVIEW_COUNT), 0)"
+
+  - name: THEME_ANALYSIS
+    description: "Sentiment analysis by review theme within each category (138 rows)"
+    base_table:
+      database: REVIEWSENSE_DB
+      schema: GOLD
+      table: THEME_CATEGORY_ANALYSIS
+    dimensions:
+      - name: DERIVED_CATEGORY
+        synonyms: ["product category", "category"]
+        description: "Product category"
+        expr: DERIVED_CATEGORY
+        data_type: VARCHAR
+      - name: REVIEW_THEME
+        synonyms: ["theme", "topic", "aspect"]
+        description: "AI-classified review theme (e.g., sound_quality, battery_life, comfort)"
+        expr: REVIEW_THEME
+        data_type: VARCHAR
+        is_enum: true
+        sample_values:
+          - "battery_life"
+          - "build_quality"
+          - "sound_quality"
+          - "connectivity"
+          - "comfort"
+          - "value_for_money"
+          - "customer_service"
+          - "durability"
+          - "ease_of_use"
+          - "other"
+    facts:
+      - name: THEME_REVIEW_COUNT
+        description: "Reviews mentioning this theme"
+        expr: REVIEW_COUNT
+        data_type: NUMBER
+      - name: THEME_AVG_RATING
+        description: "Average rating for reviews with this theme"
+        expr: AVG_RATING
+        data_type: NUMBER
+      - name: THEME_AVG_SENTIMENT
+        description: "Average sentiment for this theme"
+        expr: AVG_SENTIMENT
+        data_type: NUMBER
+      - name: THEME_NEGATIVE_COUNT
+        description: "Negative reviews for this theme"
+        expr: NEGATIVE_REVIEW_COUNT
+        data_type: NUMBER
+      - name: THEME_NEGATIVE_RATE
+        description: "Negative rate for this theme"
+        expr: NEGATIVE_RATE
+        data_type: NUMBER
+      - name: NEGATIVE_AVG_SENTIMENT
+        description: "Average sentiment of only the negative reviews for this theme"
+        expr: NEGATIVE_AVG_SENTIMENT
+        data_type: NUMBER
+    metrics:
+      - name: TOTAL_THEME_REVIEWS
+        description: "Total reviews across themes"
+        expr: SUM(REVIEW_COUNT)
+
+  - name: COMPLAINTS
+    description: "Complaint analysis by theme and category (118 rows)"
+    base_table:
+      database: REVIEWSENSE_DB
+      schema: GOLD
+      table: COMPLAINT_ANALYSIS
+    dimensions:
+      - name: DERIVED_CATEGORY
+        synonyms: ["product category", "category"]
+        description: "Product category with complaints"
+        expr: DERIVED_CATEGORY
+        data_type: VARCHAR
+      - name: REVIEW_THEME
+        synonyms: ["complaint topic", "issue type", "theme"]
+        description: "Theme of the complaint"
+        expr: REVIEW_THEME
+        data_type: VARCHAR
+    facts:
+      - name: COMPLAINT_COUNT
+        description: "Number of complaints"
+        expr: COMPLAINT_COUNT
+        data_type: NUMBER
+      - name: COMPLAINT_AVG_SENTIMENT
+        description: "Average sentiment of complaints (typically negative)"
+        expr: AVG_SENTIMENT
+        data_type: NUMBER
+      - name: COMPLAINT_AVG_HELPFUL_VOTES
+        description: "Average helpful votes on complaint reviews"
+        expr: AVG_HELPFUL_VOTES
+        data_type: NUMBER
+      - name: HIGH_QUALITY_COMPLAINTS
+        description: "Number of high-quality complaint reviews"
+        expr: HIGH_QUALITY_COMPLAINTS
+        data_type: NUMBER
+      - name: HIGH_QUALITY_RATE
+        description: "Percentage of high-quality complaints"
+        expr: HIGH_QUALITY_RATE
+        data_type: NUMBER
+    metrics:
+      - name: TOTAL_COMPLAINTS
+        synonyms: ["complaint count"]
+        description: "Total complaints across all categories and themes"
+        expr: SUM(COMPLAINT_COUNT)
+      - name: TOTAL_HIGH_QUALITY_COMPLAINTS
+        description: "Total high-quality complaints"
+        expr: SUM(HIGH_QUALITY_COMPLAINTS)
+
+relationships:
+  - name: TRENDS_TO_SENTIMENT
+    left_table: MONTHLY_TRENDS
+    right_table: CATEGORY_SENTIMENT
+    relationship_columns:
+      - left_column: DERIVED_CATEGORY
+        right_column: DERIVED_CATEGORY
+  - name: THEMES_TO_SENTIMENT
+    left_table: THEME_ANALYSIS
+    right_table: CATEGORY_SENTIMENT
+    relationship_columns:
+      - left_column: DERIVED_CATEGORY
+        right_column: DERIVED_CATEGORY
+  - name: COMPLAINTS_TO_SENTIMENT
+    left_table: COMPLAINTS
+    right_table: CATEGORY_SENTIMENT
+    relationship_columns:
+      - left_column: DERIVED_CATEGORY
+        right_column: DERIVED_CATEGORY
+
+verified_queries:
+  - name: "worst_categories"
+    question: "Which product categories have the highest negative review rate?"
+    use_as_onboarding_question: true
+    sql: |
+      SELECT DERIVED_CATEGORY, REVIEW_COUNT, AVG_RATING, NEGATIVE_RATE
+      FROM __CATEGORY_SENTIMENT
+      ORDER BY NEGATIVE_RATE DESC
+
+  - name: "top_complaints_by_category"
+    question: "What are the top complaint themes for each category?"
+    use_as_onboarding_question: true
+    sql: |
+      SELECT DERIVED_CATEGORY, REVIEW_THEME, COMPLAINT_COUNT, COMPLAINT_AVG_SENTIMENT
+      FROM __COMPLAINTS
+      ORDER BY COMPLAINT_COUNT DESC
+      LIMIT 20
+
+  - name: "sentiment_trend"
+    question: "How has sentiment changed over time for a category?"
+    use_as_onboarding_question: true
+    sql: |
+      SELECT DERIVED_CATEGORY, REVIEW_MONTH, MONTHLY_REVIEW_COUNT, MONTHLY_AVG_SENTIMENT, MONTHLY_NEGATIVE_RATE
+      FROM __MONTHLY_TRENDS
+      ORDER BY REVIEW_MONTH
+
+  - name: "best_rated_categories"
+    question: "Which categories have the best average rating?"
+    sql: |
+      SELECT DERIVED_CATEGORY, REVIEW_COUNT, AVG_RATING, AVG_SENTIMENT
+      FROM __CATEGORY_SENTIMENT
+      ORDER BY AVG_RATING DESC
+
+  - name: "high_quality_complaints"
+    question: "Which complaints get the most helpful votes?"
+    sql: |
+      SELECT DERIVED_CATEGORY, REVIEW_THEME, COMPLAINT_COUNT, COMPLAINT_AVG_HELPFUL_VOTES, HIGH_QUALITY_RATE
+      FROM __COMPLAINTS
+      ORDER BY COMPLAINT_AVG_HELPFUL_VOTES DESC
+      LIMIT 15
