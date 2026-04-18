@@ -147,8 +147,43 @@ def search_reviews(
                 "quality": r.get("REVIEW_QUALITY", ""),
             })
 
+        # Enrich results with product names from PRODUCT_LOOKUP
+        unique_asins = list({r["asin"] for r in results if r.get("asin")})
+        product_names = {}
+        if unique_asins:
+            placeholders = ", ".join(["%s"] * len(unique_asins))
+            cur.execute(f"""
+                SELECT ASIN,
+                       COALESCE(METADATA_TITLE, PRODUCT_NAME) AS PRODUCT_NAME,
+                       COALESCE(METADATA_BRAND, BRAND) AS BRAND
+                FROM GOLD.PRODUCT_LOOKUP
+                WHERE ASIN IN ({placeholders})
+            """, unique_asins)
+            for row in cur.fetchall():
+                product_names[row[0]] = {"product_name": row[1], "brand": row[2]}
+
+        # Add product name/brand to each result
+        for r in results:
+            info = product_names.get(r["asin"], {})
+            r["product_name"] = info.get("product_name")
+            r["brand"] = info.get("brand")
+
+        # Aggregate by ASIN — shows which products appear most in results
+        from collections import Counter
+        asin_counts = Counter(r["asin"] for r in results if r.get("asin"))
+        product_mentions = []
+        for asin_val, count in asin_counts.most_common(5):
+            info = product_names.get(asin_val, {})
+            product_mentions.append({
+                "asin": asin_val,
+                "product_name": info.get("product_name"),
+                "brand": info.get("brand"),
+                "mention_count": count,
+            })
+
         return {
             "results": results,
+            "product_mentions": product_mentions,
             "query_info": {
                 "query": query,
                 "filters_applied": {k: v for k, v in {
@@ -288,11 +323,13 @@ def search_products(
     min_reviews: int = 5,
     sort_by: str = "review_count",
     limit: int = 10,
+    review_theme: str | None = None,
 ) -> dict:
-    """Search products by metadata criteria: price, features, brand, category, rating.
+    """Search products by metadata criteria: price, features, brand, category, rating, theme.
 
     Queries CURATED.PRODUCT_METADATA joined with GOLD.PRODUCT_SENTIMENT_SUMMARY
-    for review stats. Pure SQL — no Cortex functions at query time.
+    for review stats. When review_theme is specified, joins ENRICHED_REVIEWS to find
+    products with positive reviews about that theme. Pure SQL — no Cortex functions.
 
     Args:
         category: Derived category filter (e.g., 'headphones_earbuds')
@@ -302,8 +339,10 @@ def search_products(
         features_contain: Keyword to search in product features (e.g., 'waterproof', 'noise cancelling')
         min_rating: Minimum average rating
         min_reviews: Minimum review count (default 5)
-        sort_by: Sort field — 'review_count', 'avg_rating', 'price', 'avg_sentiment'
+        sort_by: Sort field — 'review_count', 'avg_rating', 'price', 'avg_sentiment', 'theme_sentiment'
         limit: Max results (default 10)
+        review_theme: Filter to products with reviews about this theme (e.g., 'comfort', 'battery_life').
+                       Ranked by positive sentiment on that theme.
 
     Returns:
         dict with 'products' list and 'search_criteria' summary
@@ -330,6 +369,25 @@ def search_products(
         conditions.append("s.AVG_RATING >= %s")
         params.append(min_rating)
 
+    # Theme-based filtering: join ENRICHED_REVIEWS to find products with reviews about a theme
+    theme_join = ""
+    theme_select = ""
+    if review_theme:
+        theme_join = """
+            INNER JOIN (
+                SELECT ASIN,
+                       COUNT(*) AS theme_review_count,
+                       ROUND(AVG(SENTIMENT_SCORE), 3) AS theme_avg_sentiment,
+                       ROUND(AVG(RATING), 2) AS theme_avg_rating
+                FROM GOLD.ENRICHED_REVIEWS
+                WHERE REVIEW_THEME = %s AND SENTIMENT_SCORE > 0
+                GROUP BY ASIN
+                HAVING COUNT(*) >= 2
+            ) t ON p.ASIN = t.ASIN
+        """
+        theme_select = ", t.theme_review_count, t.theme_avg_sentiment, t.theme_avg_rating"
+        params.append(review_theme)
+
     where_clause = " AND ".join(conditions)
 
     sort_map = {
@@ -337,7 +395,11 @@ def search_products(
         "avg_rating": "s.AVG_RATING DESC NULLS LAST",
         "price": "m.PRICE ASC NULLS LAST",
         "avg_sentiment": "s.AVG_SENTIMENT DESC NULLS LAST",
+        "theme_sentiment": "t.theme_avg_sentiment DESC NULLS LAST" if review_theme else "s.AVG_SENTIMENT DESC NULLS LAST",
     }
+    # Default to theme_sentiment when filtering by theme
+    if review_theme and sort_by == "review_count":
+        sort_by = "theme_sentiment"
     order_by = sort_map.get(sort_by, "p.REVIEW_COUNT DESC")
 
     with get_cursor() as cur:
@@ -354,9 +416,11 @@ def search_products(
                 s.NEGATIVE_RATE,
                 s.TOP_THEME,
                 m.FEATURES_TEXT AS FEATURES_STR
+                {theme_select}
             FROM GOLD.PRODUCT_LOOKUP p
             LEFT JOIN CURATED.PRODUCT_METADATA m ON p.ASIN = m.ASIN
             LEFT JOIN GOLD.PRODUCT_SENTIMENT_SUMMARY s ON p.ASIN = s.ASIN
+            {theme_join}
             WHERE {where_clause}
             ORDER BY {order_by}
             LIMIT {limit}
@@ -364,7 +428,7 @@ def search_products(
 
         products = []
         for r in cur.fetchall():
-            products.append({
+            product = {
                 "asin": r[0],
                 "product_name": r[1],
                 "brand": r[2],
@@ -376,7 +440,12 @@ def search_products(
                 "negative_rate": float(r[8]) if r[8] else None,
                 "top_theme": r[9],
                 "features": r[10][:300] if r[10] else None,
-            })
+            }
+            if review_theme:
+                product["theme_review_count"] = r[11]
+                product["theme_avg_sentiment"] = float(r[12]) if r[12] else None
+                product["theme_avg_rating"] = float(r[13]) if r[13] else None
+            products.append(product)
 
         return {
             "products": products,
@@ -385,7 +454,7 @@ def search_products(
                 "min_price": min_price, "max_price": max_price,
                 "features_contain": features_contain,
                 "min_rating": min_rating, "min_reviews": min_reviews,
-                "sort_by": sort_by,
+                "sort_by": sort_by, "review_theme": review_theme,
             }.items() if v is not None},
             "result_count": len(products),
         }
