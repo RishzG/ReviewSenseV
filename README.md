@@ -18,6 +18,24 @@ Over the past 3 months, ReviewSense AI has evolved from a single-dataset review-
 
 ---
 
+## Problem
+
+Customer reviews are highly unstructured and difficult to analyze manually at scale. Important signals such as recurring complaints, sentiment patterns, and product improvement opportunities are often buried in large volumes of raw review text.
+
+---
+
+## Solution
+
+We built an end-to-end review intelligence system that combines data engineering, analytics, and AI to:
+
+- Ingest and clean review data
+- Transform raw reviews into structured analytical models
+- Support analytics and insight generation
+- Generate AI-powered summaries and business insights
+- Deliver results through an interactive application interface
+
+---
+
 ## System Architecture & Design
 
 ### Overall System Architecture
