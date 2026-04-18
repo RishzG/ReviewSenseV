@@ -7,7 +7,7 @@ ReviewSense-AI is an AI-powered customer review insights copilot built with Snow
 
 ## Team Members
 - Jiwei Yang
-- Weijia
+- Weijia Fang
 - Rishik Ganta
 
 ---
